@@ -131,5 +131,5 @@ python -m http.server 8080
 
 ## 授權
 
-目前專案尚未附上授權條款。  
-若要開源，建議新增 `LICENSE`（如 MIT）並在此處更新說明。
+本專案採用 `MIT License` 授權。  
+詳細內容請參考根目錄的 `LICENSE` 檔案。
