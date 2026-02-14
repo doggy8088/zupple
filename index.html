@@ -175,6 +175,34 @@
         @media(min-width: 768px) {
             .game-header { top: 30px; width: 90vw; max-width: 500px; }
         }
+
+        /* --- Footer --- */
+        .footer {
+            position: fixed;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            padding: 10px 20px;
+            border-radius: 20px;
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.8);
+            white-space: nowrap;
+            z-index: 5;
+        }
+        .footer a {
+            color: var(--primary);
+            text-decoration: none;
+            transition: 0.2s;
+        }
+        .footer a:hover {
+            color: #fff;
+            text-shadow: 0 0 10px var(--primary);
+        }
     </style>
 </head>
 <body>
@@ -223,6 +251,11 @@
             </div>
         </div>
     </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        本站由 <a href="https://m.facebook.com/will.fans" target="_blank" rel="noopener noreferrer" aria-label="Will 保哥的技術交流中心 Facebook 粉絲專頁">Will 保哥的技術交流中心</a> 設計、開發與維護
+    </footer>
 
     <script>
         // ---------------- 狀態管理 ----------------
