@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Zupple</title>
+    <!-- 引入 Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        :root {
+            --glass-bg: rgba(20, 20, 20, 0.75);
+            --glass-border: rgba(255, 255, 255, 0.15);
+            --primary: #00d2ff;
+            --secondary: #3a7bd5;
+            --warning: #f1c40f;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: 'Segoe UI', 'Microsoft JhengHei', sans-serif;
+            background-color: #050505;
+            color: white;
+            user-select: none;
+            -webkit-user-select: none;
+            height: 100vh;
+            width: 100vw;
+            /* 防止手機下拉重整 */
+            overscroll-behavior: none;
+        }
+
+        #bg-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
+        }
+
+        .view-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            transition: opacity 0.4s ease; opacity: 1; pointer-events: auto;
+        }
+
+        .hidden { opacity: 0; pointer-events: none; }
+
+        /* --- 主選單 --- */
+        .menu-card {
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+            padding: 30px; border-radius: 24px;
+            border: 1px solid var(--glass-border);
+            text-align: center;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+            max-width: 450px; width: 90%;
+            display: flex; flex-direction: column; gap: 15px;
+        }
+
+        h1 {
+            margin: 0; font-size: 2.5rem;
+            background: linear-gradient(135deg, #fff, var(--primary));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+            letter-spacing: 4px; text-transform: uppercase;
+        }
+
+        .preview-area {
+            width: 180px; height: 180px; margin: 0 auto;
+            border: 2px solid rgba(255,255,255,0.2); border-radius: 12px;
+            overflow: hidden; position: relative;
+            background-size: cover; background-position: center;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        .file-label {
+            position: absolute; bottom: 0; left: 0; width: 100%;
+            background: rgba(0,0,0,0.8); padding: 8px; font-size: 0.9rem;
+            cursor: pointer; transition: 0.3s;
+        }
+        .file-label:hover { color: var(--primary); background: rgba(0,0,0,0.9); }
+
+        .btn-row { display: flex; justify-content: center; gap: 8px; }
+
+        .diff-btn {
+            background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.2);
+            color: #ccc; padding: 8px 16px; border-radius: 50px; cursor: pointer; transition: 0.3s;
+        }
+        .diff-btn.active { background: var(--primary); color: #000; border-color: var(--primary); font-weight: bold; }
+
+        .start-btn {
+            background: linear-gradient(90deg, var(--secondary), var(--primary));
+            border: none; padding: 14px; border-radius: 12px;
+            font-size: 1.1rem; font-weight: bold; color: white;
+            cursor: pointer; text-transform: uppercase; letter-spacing: 2px;
+        }
+        .start-btn:active { transform: scale(0.98); }
+
+        /* --- 遊戲介面 --- */
+        .game-header {
+            position: absolute; top: 15px; width: 100%;
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 0 20px; z-index: 20;
+            max-width: 600px; /* 限制寬度以免太開 */
+        }
+
+        .icon-btn {
+            background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);
+            color: white; padding: 8px 15px; border-radius: 20px;
+            cursor: pointer; font-size: 0.9rem; display: flex; align-items: center; gap: 5px;
+            transition: 0.2s;
+        }
+        .icon-btn:hover { background: rgba(255,255,255,0.2); }
+        .icon-btn:active { transform: scale(0.95); }
+
+        /* 特殊樣式的「看原圖」按鈕 */
+        .peek-btn {
+            background: rgba(241, 196, 15, 0.2);
+            border-color: var(--warning);
+            color: var(--warning);
+            user-select: none;
+            -webkit-touch-callout: none; /* iOS 禁止長按選單 */
+        }
+        .peek-btn:active, .peek-btn.active {
+            background: var(--warning);
+            color: black;
+        }
+
+        .game-stats { font-size: 1.2rem; font-weight: bold; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px black; }
+
+        .puzzle-container {
+            position: relative;
+            width: 90vw; height: 90vw;
+            max-width: 500px; max-height: 500px;
+            background: rgba(0,0,0,0.8);
+            border: 4px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            box-shadow: 0 0 60px rgba(0,0,0,0.6);
+        }
+
+        .tile {
+            position: absolute;
+            background-repeat: no-repeat;
+            cursor: pointer;
+            transition: transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+            box-sizing: border-box;
+            border: 1px solid rgba(0,0,0,0.5);
+            box-shadow: inset 0 0 0 1px rgba(255,255,255,0.1);
+            z-index: 10;
+        }
+        .tile:hover { z-index: 20; filter: brightness(1.15); border-color: var(--primary); }
+
+        /* 原圖提示層 (預設隱藏) */
+        .hint-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background-size: 100% 100%; /* 強制填滿 */
+            background-repeat: no-repeat;
+            opacity: 0;
+            pointer-events: none; /* 讓滑鼠穿透 */
+            z-index: 50; /* 比方塊高 */
+            transition: opacity 0.3s ease;
+            border-radius: 4px;
+        }
+        .hint-overlay.show { opacity: 1; }
+
+        /* 勝利畫面 */
+        .win-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 100; opacity: 0; pointer-events: none;
+            transition: opacity 0.5s; backdrop-filter: blur(5px);
+        }
+        .win-overlay.show { opacity: 1; pointer-events: auto; }
+
+        input[type="file"] { display: none; }
+
+        @media(min-width: 768px) {
+            .game-header { top: 30px; width: 90vw; max-width: 500px; }
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="bg-canvas"></canvas>
+
+    <!-- 主選單 -->
+    <div id="menu-view" class="view-container">
+        <div class="menu-card">
+            <h1>Zupple</h1>
+            <div id="menuPreview" class="preview-area">
+                <label class="file-label">
+                    📷 更換圖片
+                    <input type="file" id="imageInput" accept="image/*">
+                </label>
+            </div>
+            
+            <div class="btn-row">
+                <button class="diff-btn active" onclick="setDiff(3)">3x3</button>
+                <button class="diff-btn" onclick="setDiff(5)">5x5</button>
+                <button class="diff-btn" onclick="setDiff(7)">7x7</button>
+            </div>
+            
+            <button class="start-btn" onclick="startGame()">開始遊戲</button>
+        </div>
+    </div>
+
+    <!-- 遊戲介面 -->
+    <div id="game-view" class="view-container hidden">
+        <div class="game-header">
+            <button class="icon-btn" onclick="toMenu()">← 退出</button>
+            <div class="game-stats"><span id="stepCount">0</span> 步</div>
+            <!-- 新增：看原圖按鈕 -->
+            <button id="peekBtn" class="icon-btn peek-btn">👀 按住看原圖</button>
+        </div>
+        
+        <div id="puzzle-board" class="puzzle-container">
+            <!-- 提示層 (原圖) -->
+            <div id="hintOverlay" class="hint-overlay"></div>
+            
+            <!-- 勝利層 -->
+            <div id="winScreen" class="win-overlay">
+                <h2 style="color:var(--primary); font-size:2.5rem; margin-bottom:10px; text-shadow:0 0 20px var(--primary);">完成！</h2>
+                <p style="color:#ccc; margin-bottom:20px;">總步數: <span id="finalSteps">0</span></p>
+                <button class="start-btn" onclick="resetGame()">再玩一次</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ---------------- 狀態管理 ----------------
+        const state = {
+            gridSize: 3,
+            croppedImageUrl: '',
+            tiles: [],
+            emptyPos: { r: 0, c: 0 },
+            steps: 0,
+            isPlaying: false
+        };
+
+        const els = {
+            menu: document.getElementById('menu-view'),
+            game: document.getElementById('game-view'),
+            preview: document.getElementById('menuPreview'),
+            board: document.getElementById('puzzle-board'),
+            steps: document.getElementById('stepCount'),
+            finalSteps: document.getElementById('finalSteps'),
+            win: document.getElementById('winScreen'),
+            hint: document.getElementById('hintOverlay'),
+            diffBtns: document.querySelectorAll('.diff-btn'),
+            peekBtn: document.getElementById('peekBtn')
+        };
+
+        // ---------------- 圖片裁切與處理 ----------------
+        function cropImageToSquare(img) {
+            const canvas = document.createElement('canvas');
+            const size = 1024; 
+            canvas.width = size; canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            const minSide = Math.min(img.width, img.height);
+            const sx = (img.width - minSide) / 2;
+            const sy = (img.height - minSide) / 2;
+            ctx.drawImage(img, sx, sy, minSide, minSide, 0, 0, size, size);
+            return canvas.toDataURL('image/jpeg', 0.9);
+        }
+
+        document.getElementById('imageInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                const img = new Image();
+                img.onload = () => {
+                    state.croppedImageUrl = cropImageToSquare(img);
+                    updatePreview();
+                };
+                img.src = evt.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function updatePreview() {
+            els.preview.style.backgroundImage = `url(${state.croppedImageUrl})`;
+        }
+
+        function initDefault() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 600; canvas.height = 600;
+            const ctx = canvas.getContext('2d');
+            const grd = ctx.createLinearGradient(0,0,600,600);
+            grd.addColorStop(0, '#2c3e50'); grd.addColorStop(1, '#3498db');
+            ctx.fillStyle = grd; ctx.fillRect(0,0,600,600);
+            
+            // 畫一些簡單圖案確保拼圖方向性
+            ctx.strokeStyle = "rgba(255,255,255,0.1)"; ctx.lineWidth = 20;
+            ctx.beginPath(); ctx.arc(300,300,200,0,Math.PI*2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(600,600); ctx.stroke();
+            
+            ctx.fillStyle = '#ecf0f1'; ctx.font = 'bold 80px Arial'; 
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('ZUPPLE', 300, 300);
+
+            const img = new Image();
+            img.onload = () => {
+                state.croppedImageUrl = cropImageToSquare(img);
+                updatePreview();
+            }
+            img.src = canvas.toDataURL();
+        }
+
+        // ---------------- 遊戲核心邏輯 ----------------
+        window.setDiff = (n) => {
+            state.gridSize = n;
+            els.diffBtns.forEach(b => b.classList.remove('active'));
+            event.target.classList.add('active');
+        };
+
+        window.startGame = () => {
+            els.menu.classList.add('hidden');
+            els.game.classList.remove('hidden');
+            setTimeout(resetGame, 200);
+        };
+
+        window.toMenu = () => {
+            els.game.classList.add('hidden');
+            els.menu.classList.remove('hidden');
+            state.isPlaying = false;
+        };
+
+        window.resetGame = () => {
+            els.board.innerHTML = '';
+            // 重新加入結構：提示層 + 勝利層
+            els.board.appendChild(els.hint);
+            els.board.appendChild(els.win);
+            els.win.classList.remove('show');
+            
+            // 設定提示層圖片
+            els.hint.style.backgroundImage = `url(${state.croppedImageUrl})`;
+            
+            state.steps = 0;
+            els.steps.innerText = '0';
+            state.isPlaying = true;
+            
+            createBoard();
+            shuffle();
+        };
+
+        function createBoard() {
+            state.tiles = [];
+            const size = state.gridSize;
+            state.emptyPos = { r: size-1, c: size-1 };
+
+            for(let i=0; i < size*size - 1; i++) {
+                const r = Math.floor(i / size);
+                const c = i % size;
+                const tile = document.createElement('div');
+                tile.className = 'tile';
+                
+                const pct = 100 / size;
+                tile.style.width = pct + "%";
+                tile.style.height = pct + "%";
+                tile.style.backgroundImage = `url(${state.croppedImageUrl})`;
+                tile.style.backgroundSize = `${size * 100}%`;
+                
+                const bgX = (c / (size - 1)) * 100;
+                const bgY = (r / (size - 1)) * 100;
+                tile.style.backgroundPosition = `${bgX}% ${bgY}%`;
+
+                const obj = { el: tile, id: i, r: r, c: c };
+                tile.onclick = () => move(obj); // 滑鼠點擊
+                tile.ontouchend = (e) => { e.preventDefault(); move(obj); }; // 手機觸控
+                
+                state.tiles.push(obj);
+                els.board.appendChild(tile);
+            }
+            render();
+        }
+
+        function move(tile) {
+            if(!state.isPlaying) return;
+            // 如果提示層正在顯示，禁止移動（防止作弊或混淆）
+            if(els.hint.classList.contains('show')) return;
+
+            const dr = Math.abs(tile.r - state.emptyPos.r);
+            const dc = Math.abs(tile.c - state.emptyPos.c);
+            
+            if((dr === 1 && dc === 0) || (dr === 0 && dc === 1)) {
+                const tr = tile.r, tc = tile.c;
+                tile.r = state.emptyPos.r; tile.c = state.emptyPos.c;
+                state.emptyPos = { r: tr, c: tc };
+                state.steps++;
+                els.steps.innerText = state.steps;
+                render();
+                checkWin();
+            }
+        }
+
+        function render(animate = true) {
+            state.tiles.forEach(t => {
+                t.el.style.transition = animate ? 'transform 0.2s cubic-bezier(0.2, 0.8, 0.2, 1)' : 'none';
+                t.el.style.transform = `translate(${t.c * 100}%, ${t.r * 100}%)`;
+                t.el.style.left = '0'; t.el.style.top = '0';
+            });
+        }
+
+        function shuffle() {
+            const moves = state.gridSize === 3 ? 50 : 200;
+            let last = -1;
+            for(let i=0; i<moves; i++) {
+                const neighbors = state.tiles.filter(t => {
+                    const dr = Math.abs(t.r - state.emptyPos.r);
+                    const dc = Math.abs(t.c - state.emptyPos.c);
+                    return (dr+dc) === 1;
+                });
+                let valid = neighbors.filter(t => t.id !== last);
+                if(!valid.length) valid = neighbors;
+                const pick = valid[Math.floor(Math.random() * valid.length)];
+                
+                const tr = pick.r, tc = pick.c;
+                pick.r = state.emptyPos.r; pick.c = state.emptyPos.c;
+                state.emptyPos = { r: tr, c: tc };
+                last = pick.id;
+            }
+            render(false);
+        }
+
+        function checkWin() {
+            const win = state.tiles.every(t => {
+                const targetR = Math.floor(t.id / state.gridSize);
+                const targetC = t.id % state.gridSize;
+                return t.r === targetR && t.c === targetC;
+            });
+            if(win) {
+                state.isPlaying = false;
+                els.finalSteps.innerText = state.steps;
+                els.win.classList.add('show');
+                boom();
+            }
+        }
+
+        // ---------------- 看原圖功能 (Peek) ----------------
+        const showHint = (e) => {
+            if(e) e.preventDefault(); // 防止手機長按選單
+            if(!state.isPlaying) return;
+            els.hint.classList.add('show');
+            els.peekBtn.classList.add('active');
+        };
+        const hideHint = (e) => {
+            if(e) e.preventDefault();
+            els.hint.classList.remove('show');
+            els.peekBtn.classList.remove('active');
+        };
+
+        // 滑鼠事件
+        els.peekBtn.addEventListener('mousedown', showHint);
+        els.peekBtn.addEventListener('mouseup', hideHint);
+        els.peekBtn.addEventListener('mouseleave', hideHint);
+
+        // 觸控事件 (支援手機)
+        els.peekBtn.addEventListener('touchstart', showHint, {passive: false});
+        els.peekBtn.addEventListener('touchend', hideHint);
+        els.peekBtn.addEventListener('touchcancel', hideHint);
+
+        // ---------------- 背景特效 ----------------
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('bg-canvas'), alpha:true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        
+        const geo = new THREE.BufferGeometry();
+        const cnt = 2000;
+        const pos = new Float32Array(cnt*3);
+        for(let i=0; i<cnt*3; i++) pos[i] = (Math.random()-0.5)*20;
+        geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+        const mat = new THREE.PointsMaterial({ size:0.04, color:0x00d2ff, transparent:true, opacity:0.6 });
+        const mesh = new THREE.Points(geo, mat);
+        scene.add(mesh);
+        camera.position.z = 5;
+
+        let speed=0.001, mx=0, my=0;
+        document.onmousemove = e => { mx=(e.clientX-window.innerWidth/2)*0.001; my=(e.clientY-window.innerHeight/2)*0.001; };
+        function animate() {
+            requestAnimationFrame(animate);
+            mesh.rotation.y += speed;
+            mesh.rotation.x += (my - mesh.rotation.x)*0.05;
+            if(speed > 0.001) speed *= 0.95;
+            renderer.render(scene, camera);
+        }
+        animate();
+        function boom() { speed = 0.2; }
+        window.onresize = () => {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+
+        initDefault();
+    </script>
+</body>
+</html>
